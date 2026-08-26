@@ -94,21 +94,16 @@
 
 <script>
 /* ============================================================
-   CONFIG — à modifier une fois ton Google Sheet créé
-   ============================================================
-   1. Crée un Google Sheet avec ces colonnes en ligne 1 :
-      Nom | Adresse | Ville | Latitude | Longitude | Categorie | Notes | Source
-   2. Fichier > Partager > Publier sur le web > format CSV
-   3. Colle l'URL générée ci-dessous.
-   Latitude/Longitude peuvent être laissées vides : la carte
-   géocodera automatiquement l'adresse (via OpenStreetMap) et
-   gardera le résultat en mémoire locale du navigateur.
+   CONFIG
    ============================================================ */
-const SHEET_CSV_URL = "test.csv"; // ⚠️ à remplacer par le lien de ton Google Sheet publié plus tard
+const SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/18gBqvatcT5b4sL7JXluhL_OyhF--jCJZ3IEXoUvMS2M/export?format=csv&gid=0";
 
 // URL du Google Apps Script déployé, qui permet de COCHER "testé" directement
 // depuis la carte (voir apps-script.gs pour le code à déployer).
-const APPS_SCRIPT_URL = "REMPLACE_MOI_PAR_URL_APPS_SCRIPT";
+const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxS_Aupx0m4-FIfrcZVrWkcNMKO9RRFNk4JMjuVY_zDoG-iaoPlgywqAm7MVtwrxM9o/exec";
+
+// Doit être identique à SECRET_TOKEN dans apps-script.gs
+const APPS_SCRIPT_TOKEN = "bouffster-x7k2m9";
 
 const DEFAULT_CENTER = [46.6, 2.4]; // France
 const DEFAULT_ZOOM = 6;
@@ -188,9 +183,6 @@ function renderMarkers(places) {
         Déjà testé
       </label>
     `);
-    marker.on('popupopen', () => {
-      // rien de spécial ici pour l'instant, réservé si besoin d'init JS supplémentaire
-    });
     markersLayer.addLayer(marker);
   });
 }
@@ -223,25 +215,19 @@ document.getElementById('filterTeste').addEventListener('change', applyFilters);
 document.getElementById('search').addEventListener('input', applyFilters);
 
 // Appelée quand on coche/décoche "Déjà testé" dans un popup.
-// 1) Met à jour l'état local + l'icône tout de suite (retour visuel instantané)
-// 2) Envoie la mise à jour au Google Sheet via Apps Script (persistant)
 window.handleTesteToggle = function(id, checked, checkboxEl) {
   const newValue = checked ? "Oui" : "Non";
   const place = allPlaces.find(p => String(p.id) === String(id));
   if (place) place.teste = newValue;
 
-  if (checkboxEl) {
-    const label = checkboxEl.closest('.leaflet-popup-content');
-  }
-
   if (APPS_SCRIPT_URL.includes("REMPLACE_MOI")) {
     console.warn("APPS_SCRIPT_URL non configuré : la case est mise à jour visuellement mais pas sauvegardée dans le Sheet.");
   } else {
-    const url = `${APPS_SCRIPT_URL}?action=updateTeste&id=${encodeURIComponent(id)}&value=${encodeURIComponent(newValue)}`;
+    const url = `${APPS_SCRIPT_URL}?action=updateTeste&id=${encodeURIComponent(id)}&value=${encodeURIComponent(newValue)}&token=${encodeURIComponent(APPS_SCRIPT_TOKEN)}`;
     fetch(url, { mode: "no-cors" }).catch(err => console.warn("Échec de la sauvegarde :", err));
   }
 
-  applyFilters(); // redessine les marqueurs avec le nouveau style (plein/pointillé)
+  applyFilters();
 };
 
 async function load() {
