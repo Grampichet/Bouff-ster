@@ -39,12 +39,18 @@
   }
   header input { flex: 1; min-width: 140px; }
 
-  #status {
-    font-size: 12px;
-    color: #8a8071;
-    padding: 4px 16px;
+  #status { font-size: 12px; color: #8a8071; padding: 4px 16px; background: #fff; }
+  #locationBar { background: #fbf4ec; border-bottom: 1px solid #e8e0d4; padding: 8px 16px; }
+  #locationBar button {
+    padding: 7px 12px;
+    border: 1px solid #ddd3c2;
+    border-radius: 8px;
     background: #fff;
+    font-size: 13px;
+    cursor: pointer;
   }
+  #locationBar button:hover { background: #f1e9dc; }
+  #locationInput { flex: 1; min-width: 140px; }
 
   #map { flex: 1; }
 
@@ -81,12 +87,25 @@
   <header>
     <h1>🍽️ Mes bonnes adresses</h1>
     <select id="filterType"><option value="">Tous les types</option></select>
+    <select id="filterSource"><option value="">Toutes sources</option></select>
     <select id="filterTeste">
       <option value="">Testé & à tester</option>
       <option value="oui">Déjà testés</option>
       <option value="non">À tester</option>
     </select>
     <input id="search" type="text" placeholder="Rechercher un nom, une ville..." />
+  </header>
+  <header id="locationBar">
+    <button id="btnNearMe" type="button">📍 Autour de moi</button>
+    <input id="locationInput" type="text" placeholder="...ou tape une adresse / rue" />
+    <button id="btnLocationSearch" type="button">🔍 Chercher</button>
+    <select id="radiusSelect">
+      <option value="0.5">500 m</option>
+      <option value="1" selected>1 km</option>
+      <option value="2">2 km</option>
+      <option value="5">5 km</option>
+    </select>
+    <button id="btnClearLocation" type="button" style="display:none;">✕ Effacer</button>
   </header>
   <div id="status">Chargement des adresses…</div>
   <div id="map"></div>
@@ -206,24 +225,118 @@ function populateFilter(places) {
     opt.value = t; opt.textContent = t.charAt(0).toUpperCase() + t.slice(1);
     sel.appendChild(opt);
   });
+
+  const sources = [...new Set(places.map(p => p.source).filter(Boolean))].sort();
+  const selSource = document.getElementById('filterSource');
+  sources.forEach(s => {
+    const opt = document.createElement('option');
+    opt.value = s; opt.textContent = s;
+    selSource.appendChild(opt);
+  });
+}
+
+// ---- Distance à vol d'oiseau (formule de Haversine), en km ----
+function distanceKm(lat1, lng1, lat2, lng2) {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180) * Math.cos(lat2*Math.PI/180) * Math.sin(dLng/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+// ---- Point de référence pour "Autour de moi" / recherche de lieu ----
+let refPoint = null; // { lat, lng, label }
+let refCircle = null;
+
+function drawRefCircle() {
+  if (refCircle) { map.removeLayer(refCircle); refCircle = null; }
+  if (!refPoint) return;
+  const radiusKm = parseFloat(document.getElementById('radiusSelect').value);
+  refCircle = L.circle([refPoint.lat, refPoint.lng], {
+    radius: radiusKm * 1000,
+    color: "#c1502e",
+    weight: 1.5,
+    fillOpacity: 0.06
+  }).addTo(map);
+  map.fitBounds(refCircle.getBounds(), { padding: [30, 30] });
+}
+
+function setRefPoint(lat, lng, label) {
+  refPoint = { lat, lng, label };
+  document.getElementById('btnClearLocation').style.display = "inline-block";
+  drawRefCircle();
+  applyFilters();
+}
+
+function clearRefPoint() {
+  refPoint = null;
+  if (refCircle) { map.removeLayer(refCircle); refCircle = null; }
+  document.getElementById('btnClearLocation').style.display = "none";
+  applyFilters();
+  if (allPlaces.length) {
+    const bounds = L.latLngBounds(allPlaces.map(p => [p.lat, p.lng]));
+    map.fitBounds(bounds, { padding: [30, 30] });
+  }
 }
 
 function applyFilters() {
   const type = document.getElementById('filterType').value;
+  const source = document.getElementById('filterSource').value;
   const teste = document.getElementById('filterTeste').value;
   const q = document.getElementById('search').value.trim().toLowerCase();
+  const radiusKm = parseFloat(document.getElementById('radiusSelect').value);
+
   const filtered = allPlaces.filter(p => {
     const matchType = !type || (p.type || "").toLowerCase() === type.toLowerCase();
+    const matchSource = !source || p.source === source;
     const matchTeste = !teste || (p.teste || "").toLowerCase() === teste;
     const matchQ = !q || (p.nom + " " + p.ville + " " + p.adresse + " " + p.categorie).toLowerCase().includes(q);
-    return matchType && matchTeste && matchQ;
+    const matchDistance = !refPoint || distanceKm(refPoint.lat, refPoint.lng, p.lat, p.lng) <= radiusKm;
+    return matchType && matchSource && matchTeste && matchQ && matchDistance;
   });
   renderMarkers(filtered);
+
+  const statusEl = document.getElementById('status');
+  let msg = `${filtered.length} adresse(s) affichée(s)`;
+  if (refPoint) msg += ` — dans un rayon de ${radiusKm} km autour de "${refPoint.label}"`;
+  statusEl.textContent = msg;
 }
 
 document.getElementById('filterType').addEventListener('change', applyFilters);
+document.getElementById('filterSource').addEventListener('change', applyFilters);
 document.getElementById('filterTeste').addEventListener('change', applyFilters);
 document.getElementById('search').addEventListener('input', applyFilters);
+document.getElementById('radiusSelect').addEventListener('change', () => {
+  if (refPoint) drawRefCircle();
+  applyFilters();
+});
+
+document.getElementById('btnNearMe').addEventListener('click', () => {
+  if (!navigator.geolocation) {
+    alert("La géolocalisation n'est pas disponible sur ce navigateur.");
+    return;
+  }
+  navigator.geolocation.getCurrentPosition(
+    pos => setRefPoint(pos.coords.latitude, pos.coords.longitude, "ma position"),
+    err => alert("Impossible de récupérer ta position : " + err.message)
+  );
+});
+
+document.getElementById('btnLocationSearch').addEventListener('click', async () => {
+  const val = document.getElementById('locationInput').value.trim();
+  if (!val) return;
+  const geo = await geocode(val);
+  if (geo) {
+    setRefPoint(geo.lat, geo.lng, val);
+  } else {
+    alert("Lieu introuvable : " + val);
+  }
+});
+document.getElementById('locationInput').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') document.getElementById('btnLocationSearch').click();
+});
+
+document.getElementById('btnClearLocation').addEventListener('click', clearRefPoint);
 
 // Appelée quand on coche/décoche "Déjà testé" dans un popup.
 // 1) Met à jour l'état local + l'icône tout de suite (retour visuel instantané)
