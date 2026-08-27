@@ -54,31 +54,76 @@
 
   #map { flex: 1; }
 
-  .leaflet-popup-content { font-size: 14px; line-height: 1.4; }
-  .popup-title { font-weight: 700; margin-bottom: 2px; }
+  .leaflet-popup-content-wrapper { border-radius: 14px; padding: 2px; }
+  .leaflet-popup-content { font-size: 14px; line-height: 1.45; margin: 12px 14px; width: 240px !important; }
+  .popup-title { font-weight: 700; font-size: 16px; margin-bottom: 6px; color: var(--ink); }
+  .popup-badges { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
   .popup-cat {
     display: inline-block;
     font-size: 11px;
-    padding: 1px 7px;
-    border-radius: 10px;
+    font-weight: 600;
+    padding: 3px 9px;
+    border-radius: 20px;
     background: #f1e9dc;
     color: #6b5b3f;
-    margin-bottom: 6px;
   }
-  .popup-notes { margin-top: 4px; }
-  .popup-source-text { margin-top: 4px; font-size: 12px; color: #8a8071; }
-  .popup-link a { color: var(--accent); font-size: 13px; }
+  .popup-badge-type {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 9px;
+    border-radius: 20px;
+    background: #fdf1ea;
+    color: var(--accent);
+  }
+  .popup-address {
+    display: flex;
+    gap: 6px;
+    align-items: flex-start;
+    font-size: 13px;
+    color: #4a4237;
+    margin-bottom: 4px;
+  }
+  .popup-notes-block {
+    margin-top: 10px;
+    padding: 8px 10px;
+    background: #f9f5ee;
+    border-left: 3px solid #e0d3ba;
+    border-radius: 6px;
+    font-size: 13px;
+    color: #4a4237;
+  }
+  .popup-notes-label {
+    display: block;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #a08e6a;
+    margin-bottom: 3px;
+  }
+  .popup-source-text { margin-top: 8px; font-size: 12px; color: #8a8071; }
+  .popup-link { margin-top: 4px; }
+  .popup-link a {
+    display: inline-block;
+    color: var(--accent);
+    font-size: 13px;
+    font-weight: 600;
+    text-decoration: none;
+  }
+  .popup-link a:hover { text-decoration: underline; }
   .popup-teste {
     display: flex;
     align-items: center;
-    gap: 6px;
-    margin-top: 8px;
-    padding-top: 8px;
+    gap: 8px;
+    margin-top: 10px;
+    padding-top: 10px;
     border-top: 1px solid #eee;
     font-size: 13px;
+    font-weight: 600;
     cursor: pointer;
   }
-  .popup-teste input { width: 16px; height: 16px; cursor: pointer; }
+  .popup-teste input { width: 17px; height: 17px; cursor: pointer; accent-color: var(--accent); }
 </style>
 </head>
 <body>
@@ -199,9 +244,12 @@ function renderMarkers(places) {
     const checkboxId = "teste-" + p.id;
     marker.bindPopup(`
       <div class="popup-title">${p.nom || "Sans nom"}</div>
-      ${p.categorie ? `<span class="popup-cat">${p.categorie}</span>` : ""}
-      <div>${p.adresse || ""}${p.ville ? ", " + p.ville : ""}</div>
-      ${p.notes ? `<div class="popup-notes">${p.notes}</div>` : ""}
+      <div class="popup-badges">
+        ${p.type ? `<span class="popup-badge-type">${styleFor(p.type).emoji} ${p.type.charAt(0).toUpperCase() + p.type.slice(1)}</span>` : ""}
+        ${p.categorie ? `<span class="popup-cat">${p.categorie}</span>` : ""}
+      </div>
+      ${(p.adresse || p.ville) ? `<div class="popup-address">📍 <span>${p.adresse || ""}${p.ville ? (p.adresse ? ", " : "") + p.ville : ""}</span></div>` : ""}
+      ${p.notes ? `<div class="popup-notes-block"><span class="popup-notes-label">💬 Notes / commentaire</span>${p.notes}</div>` : ""}
       ${p.source ? `<div class="popup-source-text">Source : ${p.source}</div>` : ""}
       ${p.lien ? `<div class="popup-link"><a href="${p.lien}" target="_blank">Ouvrir la fiche ↗</a></div>` : ""}
       <label class="popup-teste">
