@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Ma carte des bonnes adresses</title>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+
+<style>
+  :root {
+    --bg: #faf7f2;
+    --ink: #2b241c;
+    --accent: #c1502e;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; font-family: -apple-system, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--ink); }
+  #app { display: flex; flex-direction: column; height: 100%; }
+
+  header {
+    padding: 10px 16px;
+    background: #fff;
+    border-bottom: 1px solid #e8e0d4;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+    z-index: 1000;
+  }
+  header h1 { font-size: 16px; margin: 0; margin-right: auto; }
+  header input, header select {
+    padding: 7px 10px;
+    border: 1px solid #ddd3c2;
+    border-radius: 8px;
+    font-size: 14px;
+    background: #fff;
+  }
+  header input { flex: 1; min-width: 140px; }
+
+  #status { font-size: 12px; color: #8a8071; padding: 4px 16px; background: #fff; }
+  #locationBar { background: #fbf4ec; border-bottom: 1px solid #e8e0d4; padding: 8px 16px; }
+  #locationBar button {
+    padding: 7px 12px;
+    border: 1px solid #ddd3c2;
+    border-radius: 8px;
+    background: #fff;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  #locationBar button:hover { background: #f1e9dc; }
+
+  #map { flex: 1; }
+
+  .leaflet-popup-content-wrapper { border-radius: 14px; padding: 2px; }
+  .leaflet-popup-content { font-size: 14px; line-height: 1.45; margin: 12px 14px; width: 240px !important; }
+  .popup-title { font-weight: 700; font-size: 16px; margin-bottom: 6px; color: var(--ink); }
+  .popup-badges { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+  .popup-cat {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 9px;
+    border-radius: 20px;
+    background: #f1e9dc;
+    color: #6b5b3f;
+  }
+  .popup-badge-type {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 9px;
+    border-radius: 20px;
+    background: #fdf1ea;
+    color: var(--accent);
+  }
+  .popup-address {
+    display: flex;
+    gap: 6px;
+    align-items: flex-start;
+    font-size: 13px;
+    color: #4a4237;
+    margin-bottom: 4px;
+  }
+  .popup-notes-block {
+    margin-top: 10px;
+    padding: 8px 10px;
+    background: #f9f5ee;
+    border-left: 3px solid #e0d3ba;
+    border-radius: 6px;
+    font-size: 13px;
+    color: #4a4237;
+  }
+  .popup-notes-label {
+    display: block;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #a08e6a;
+    margin-bottom: 3px;
+  }
+  .popup-source-text { margin-top: 8px; font-size: 12px; color: #8a8071; }
+  .popup-link { margin-top: 4px; }
+  .popup-link a {
+    display: inline-block;
+    color: var(--accent);
+    font-size: 13px;
+    font-weight: 600;
+    text-decoration: none;
+  }
+  .popup-link a:hover { text-decoration: underline; }
+  .popup-teste {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid #eee;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .popup-teste input { width: 17px; height: 17px; cursor: pointer; accent-color: var(--accent); }
+
+  #nearbyOverlay {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(43,36,28,0.45);
+    z-index: 2000;
+    align-items: flex-end;
+    justify-content: center;
+  }
+  #nearbyOverlay.open { display: flex; }
+  #nearbyPanel {
+    background: #fff;
+    width: 100%;
+    max-width: 480px;
+    max-height: 78vh;
+    border-radius: 18px 18px 0 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  #nearbyHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 18px;
+    border-bottom: 1px solid #eee;
+  }
+  #nearbyHeader h2 { font-size: 16px; margin: 0; }
+  #nearbyHeader button {
+    border: none; background: #f1e9dc; width: 30px; height: 30px;
+    border-radius: 50%; font-size: 14px; cursor: pointer;
+  }
+  #nearbyList { overflow-y: auto; padding: 6px 0; }
+  .nearby-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 18px;
+    cursor: pointer;
+    border-bottom: 1px solid #f4efe6;
+  }
+  .nearby-item:hover { background: #fbf6ee; }
+  .nearby-rank {
+    width: 22px; text-align: center; font-weight: 700; color: #a08e6a; font-size: 13px;
+  }
+  .nearby-emoji { font-size: 20px; }
+  .nearby-info { flex: 1; min-width: 0; }
+  .nearby-name { font-weight: 600; font-size: 14px; }
+  .nearby-sub { font-size: 12px; color: #8a8071; }
+  .nearby-dist { font-size: 13px; font-weight: 700; color: var(--accent); white-space: nowrap; }
+</style>
+</head>
+<body>
+
+<div id="app">
+  <header>
+    <h1>🍽️ Mes bonnes adresses</h1>
+    <select id="filterType"><option value="">Tous les types</option></select>
+    <select id="filterTeste">
+      <option value="">Testé & à tester</option>
+      <option value="oui">Déjà testés</option>
+      <option value="non">À tester</option>
+    </select>
+    <input id="search" type="text" placeholder="Rechercher un nom, une ville..." />
+  </header>
+  <header id="locationBar">
+    <button id="btnNearMe" type="button">📍 Autour de moi</button>
+  </header>
+  <div id="status">Chargement des adresses…</div>
+  <div id="map"></div>
+</div>
+
+<div id="nearbyOverlay">
+  <div id="nearbyPanel">
+    <div id="nearbyHeader">
+      <h2>📍 Autour de moi</h2>
+      <button id="btnCloseNearby" type="button">✕</button>
+    </div>
+    <div id="nearbyList"></div>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   CONFIG — à modifier une fois ton Google Sheet créé
+   ============================================================
+   1. Crée un Google Sheet avec ces colonnes en ligne 1 :
+      Nom | Adresse | Ville | Latitude | Longitude | Categorie | Notes | Source
+   2. Fichier > Partager > Publier sur le web > format CSV
+   3. Colle l'URL générée ci-dessous.
+   Latitude/Longitude peuvent être laissées vides : la carte
+   géocodera automatiquement l'adresse (via OpenStreetMap) et
+   gardera le résultat en mémoire locale du navigateur.
+   ============================================================ */
+const SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/18gBqvatcT5b4sL7JXluhL_OyhF--jCJZ3IEXoUvMS2M/export?format=csv&gid=1599367986";
+
+// URL du Google Apps Script déployé, qui permet de COCHER "testé" directement
+// depuis la carte (voir apps-script.gs pour le code à déployer).
+const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxS_Aupx0m4-FIfrcZVrWkcNMKO9RRFNk4JMjuVY_zDoG-iaoPlgywqAm7MVtwrxM9o/exec";
+
+// Doit être identique à SECRET_TOKEN dans apps-script.gs
+const APPS_SCRIPT_TOKEN = "bouffster-x7k2m9";
+
+const DEFAULT_CENTER = [46.6, 2.4]; // France
+const DEFAULT_ZOOM = 6;
+
+// ---- Carte ----
+const map = L.map('map').setView(DEFAULT_CENTER, DEFAULT_ZOOM);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '&copy; OpenStreetMap contributors',
+  maxZoom: 19
+}).addTo(map);
+
+const markersLayer = L.layerGroup().addTo(map);
+let allPlaces = [];
+
+const TYPE_STYLE = {
+  resto:  { emoji: "🍽️", color: "#c1502e" },
+  bar:    { emoji: "🍷", color: "#8a5aa8" },
+  expo:   { emoji: "🖼️", color: "#2e5b8a" },
+  rando:  { emoji: "🥾", color: "#3d7a5c" },
+  visite: { emoji: "🏛️", color: "#b8862e" },
+  "domaine viticole": { emoji: "🍇", color: "#6b2d5c" },
+  ferme:    { emoji: "🚜", color: "#5c7a3d" },
+  epicerie: { emoji: "🥖", color: "#a8763d" }
+};
+const DEFAULT_STYLE = { emoji: "📍", color: "#8a8071" };
+
+function styleFor(type) {
+  const key = (type || "").trim().toLowerCase();
+  return TYPE_STYLE[key] || DEFAULT_STYLE;
+}
+
+function makeIcon(type, teste) {
+  const s = styleFor(type);
+  const isTeste = (teste || "").trim().toLowerCase() === "oui";
+  const border = isTeste ? `3px solid ${s.color}` : `2px dashed ${s.color}`;
+  return L.divIcon({
+    className: '',
+    html: `<div style="background:#fff;width:28px;height:28px;border-radius:50%;border:${border};display:flex;align-items:center;justify-content:center;font-size:14px;box-shadow:0 1px 3px rgba(0,0,0,.35);">${s.emoji}</div>`,
+    iconSize: [28,28],
+    iconAnchor: [14,28],
+    popupAnchor: [0,-26]
+  });
+}
+
+// ---- Géocodage (fallback si pas de Latitude/Longitude dans le Sheet) ----
+async function geocode(address) {
+  const cacheKey = "geocode:" + address;
+  const cached = localStorage.getItem(cacheKey);
+  if (cached) return JSON.parse(cached);
+  try {
+    const url = "https://nominatim.openstreetmap.org/search?format=json&limit=1&q=" + encodeURIComponent(address);
+    const res = await fetch(url, { headers: { "Accept-Language": "fr" } });
+    const data = await res.json();
+    if (data && data[0]) {
+      const coords = { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+      localStorage.setItem(cacheKey, JSON.stringify(coords));
+      return coords;
+    }
+  } catch (e) { console.warn("Géocodage échoué pour", address, e); }
+  return null;
+}
+
+function renderMarkers(places) {
+  markersLayer.clearLayers();
+  places.forEach(p => {
+    if (p.lat == null || p.lng == null) return;
+    const marker = L.marker([p.lat, p.lng], { icon: makeIcon(p.type, p.teste) });
+    const isTeste = (p.teste || "").trim().toLowerCase() === "oui";
+    const checkboxId = "teste-" + p.id;
+    marker.bindPopup(`
+      <div class="popup-title">${p.nom || "Sans nom"}</div>
+      <div class="popup-badges">
+        ${p.type ? `<span class="popup-badge-type">${styleFor(p.type).emoji} ${p.type.charAt(0).toUpperCase() + p.type.slice(1)}</span>` : ""}
+        ${p.categorie ? `<span class="popup-cat">${p.categorie}</span>` : ""}
+      </div>
+      ${(p.adresse || p.ville) ? `<div class="popup-address">📍 <span>${p.adresse || ""}${p.ville ? (p.adresse ? ", " : "") + p.ville : ""}</span></div>` : ""}
+      ${p.notes ? `<div class="popup-notes-block"><span class="popup-notes-label">💬 Notes / commentaire</span>${p.notes}</div>` : ""}
+      ${p.source ? `<div class="popup-source-text">Source : ${p.source}</div>` : ""}
+      ${p.lien ? `<div class="popup-link"><a href="${p.lien}" target="_blank">Ouvrir la fiche ↗</a></div>` : ""}
+      <label class="popup-teste">
+        <input type="checkbox" id="${checkboxId}" ${isTeste ? "checked" : ""}
+          onchange="window.handleTesteToggle('${p.id}', this.checked, this)">
+        Déjà testé
+      </label>
+    `);
+    marker.on('popupopen', () => {
+      // rien de spécial ici pour l'instant, réservé si besoin d'init JS supplémentaire
+    });
+    markersLayer.addLayer(marker);
+  });
+}
+
+function populateFilter(places) {
+  const types = [...new Set(places.map(p => p.type).filter(Boolean))].sort();
+  const sel = document.getElementById('filterType');
+  types.forEach(t => {
+    const opt = document.createElement('option');
+    opt.value = t; opt.textContent = t.charAt(0).toUpperCase() + t.slice(1);
+    sel.appendChild(opt);
+  });
+}
+
+// ---- Distance à vol d'oiseau (formule de Haversine), en km ----
+function distanceKm(lat1, lng1, lat2, lng2) {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180) * Math.cos(lat2*Math.PI/180) * Math.sin(dLng/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+// ---- Panneau "Autour de moi" : les 10 adresses les plus proches ----
+function showNearby(userLat, userLng) {
+  const withDist = allPlaces
+    .map(p => ({ ...p, dist: distanceKm(userLat, userLng, p.lat, p.lng) }))
+    .sort((a, b) => a.dist - b.dist)
+    .slice(0, 10);
+
+  const listEl = document.getElementById('nearbyList');
+  listEl.innerHTML = withDist.map((p, i) => {
+    const distLabel = p.dist < 1 ? `${Math.round(p.dist * 1000)} m` : `${p.dist.toFixed(1)} km`;
+    const emoji = styleFor(p.type).emoji;
+    return `
+      <div class="nearby-item" data-lat="${p.lat}" data-lng="${p.lng}" data-id="${p.id}">
+        <div class="nearby-rank">${i + 1}</div>
+        <div class="nearby-emoji">${emoji}</div>
+        <div class="nearby-info">
+          <div class="nearby-name">${p.nom || "Sans nom"}</div>
+          <div class="nearby-sub">${p.ville || p.adresse || ""}</div>
+        </div>
+        <div class="nearby-dist">${distLabel}</div>
+      </div>
+    `;
+  }).join("");
+
+  document.getElementById('nearbyOverlay').classList.add('open');
+}
+
+document.getElementById('btnNearMe').addEventListener('click', () => {
+  if (!navigator.geolocation) {
+    alert("La géolocalisation n'est pas disponible sur ce navigateur.");
+    return;
+  }
+  navigator.geolocation.getCurrentPosition(
+    pos => showNearby(pos.coords.latitude, pos.coords.longitude),
+    err => alert("Impossible de récupérer ta position : " + err.message)
+  );
+});
+
+document.getElementById('btnCloseNearby').addEventListener('click', () => {
+  document.getElementById('nearbyOverlay').classList.remove('open');
+});
+document.getElementById('nearbyOverlay').addEventListener('click', (e) => {
+  if (e.target.id === 'nearbyOverlay') e.currentTarget.classList.remove('open');
+});
+
+// Cliquer un résultat centre la carte dessus et ouvre son popup
+document.getElementById('nearbyList').addEventListener('click', (e) => {
+  const item = e.target.closest('.nearby-item');
+  if (!item) return;
+  const lat = parseFloat(item.dataset.lat);
+  const lng = parseFloat(item.dataset.lng);
+  document.getElementById('nearbyOverlay').classList.remove('open');
+  map.setView([lat, lng], 16);
+  markersLayer.eachLayer(marker => {
+    const pos = marker.getLatLng();
+    if (Math.abs(pos.lat - lat) < 0.0001 && Math.abs(pos.lng - lng) < 0.0001) {
+      marker.openPopup();
+    }
+  });
+});
+
+function applyFilters() {
+  const type = document.getElementById('filterType').value;
+  const teste = document.getElementById('filterTeste').value;
+  const q = document.getElementById('search').value.trim().toLowerCase();
+
+  const filtered = allPlaces.filter(p => {
+    const matchType = !type || (p.type || "").toLowerCase() === type.toLowerCase();
+    const matchTeste = !teste || (p.teste || "").toLowerCase() === teste;
+    const matchQ = !q || (p.nom + " " + p.ville + " " + p.adresse + " " + p.categorie).toLowerCase().includes(q);
+    return matchType && matchTeste && matchQ;
+  });
+  renderMarkers(filtered);
+
+  document.getElementById('status').textContent = `${filtered.length} adresse(s) affichée(s)`;
+}
+
+document.getElementById('filterType').addEventListener('change', applyFilters);
+document.getElementById('filterTeste').addEventListener('change', applyFilters);
+document.getElementById('search').addEventListener('input', applyFilters);
+
+// Appelée quand on coche/décoche "Déjà testé" dans un popup.
+// 1) Met à jour l'état local + l'icône tout de suite (retour visuel instantané)
+// 2) Envoie la mise à jour au Google Sheet via Apps Script (persistant)
+window.handleTesteToggle = function(id, checked, checkboxEl) {
+  const newValue = checked ? "Oui" : "Non";
+  const place = allPlaces.find(p => String(p.id) === String(id));
+  if (place) place.teste = newValue;
+
+  if (checkboxEl) {
+    const label = checkboxEl.closest('.leaflet-popup-content');
+  }
+
+  if (APPS_SCRIPT_URL.includes("REMPLACE_MOI")) {
+    console.warn("APPS_SCRIPT_URL non configuré : la case est mise à jour visuellement mais pas sauvegardée dans le Sheet.");
+  } else {
+    const url = `${APPS_SCRIPT_URL}?action=updateTeste&id=${encodeURIComponent(id)}&value=${encodeURIComponent(newValue)}&token=${encodeURIComponent(APPS_SCRIPT_TOKEN)}`;
+    fetch(url, { mode: "no-cors" }).catch(err => console.warn("Échec de la sauvegarde :", err));
+  }
+
+  applyFilters(); // redessine les marqueurs avec le nouveau style (plein/pointillé)
+};
+
+async function load() {
+  const statusEl = document.getElementById('status');
+
+  if (SHEET_CSV_URL.includes("REMPLACE_MOI")) {
+    statusEl.textContent = "⚠️ Configure d'abord le lien vers ton Google Sheet dans le code (variable SHEET_CSV_URL).";
+    return;
+  }
+
+  Papa.parse(SHEET_CSV_URL, {
+    download: true,
+    header: true,
+    skipEmptyLines: true,
+    complete: async (results) => {
+      const rows = results.data;
+      console.log("[carte] Colonnes détectées dans le CSV :", results.meta.fields);
+      statusEl.textContent = `Chargement de ${rows.length} adresse(s)…`;
+
+      const places = [];
+      for (const row of rows) {
+        const nom = row.Nom || row.nom;
+        const adresse = row.Adresse || row.adresse;
+        const ville = row.Ville || row.ville;
+        let lat = parseFloat(row.Latitude || row.latitude);
+        let lng = parseFloat(row.Longitude || row.longitude);
+
+        if ((isNaN(lat) || isNaN(lng))) {
+          if (adresse) {
+            const full = `${adresse}, ${ville || ''}`;
+            const geo = await geocode(full);
+            if (geo) {
+              lat = geo.lat; lng = geo.lng;
+            } else {
+              console.warn(`[carte] Géocodage sans résultat pour "${nom}" → adresse envoyée : "${full}"`);
+            }
+          } else {
+            console.warn(`[carte] "${nom}" ignoré : pas de Latitude/Longitude ET pas d'Adresse exploitable. Colonnes lues sur cette ligne :`, Object.keys(row), row);
+          }
+        }
+
+        places.push({
+          id: row.ID || row.id,
+          nom, adresse, ville,
+          lat: isNaN(lat) ? null : lat,
+          lng: isNaN(lng) ? null : lng,
+          type: row.Type || row.type,
+          categorie: row.Categorie || row.categorie,
+          teste: row.Teste || row.teste || row["Testé"] || row["testé"],
+          notes: row.Notes || row.notes,
+          source: row.Source || row.source,
+          lien: row.Lien || row.lien
+        });
+      }
+
+      allPlaces = places.filter(p => p.lat && p.lng);
+      populateFilter(allPlaces);
+      renderMarkers(allPlaces);
+
+      if (allPlaces.length) {
+        const bounds = L.latLngBounds(allPlaces.map(p => [p.lat, p.lng]));
+        map.fitBounds(bounds, { padding: [30,30] });
+      }
+
+      const missing = places.length - allPlaces.length;
+      statusEl.textContent = `${allPlaces.length} adresse(s) affichée(s)` + (missing ? ` — ${missing} non localisable(s)` : "");
+    },
+    error: (err) => {
+      statusEl.textContent = "Erreur de chargement du Google Sheet : " + err.message;
+    }
+  });
+}
+
+load();
+</script>
+</body>
+</html>
